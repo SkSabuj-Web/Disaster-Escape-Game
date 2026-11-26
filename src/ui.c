@@ -425,14 +425,16 @@ static void DrawSidebar(
 
     // Life Points section
     DrawText("LIFE POINTS", 834, 222, 13, UI_ORANGE);
-    Color lpCol = (player->lifePoints > 50) ? UI_GREEN : ((player->lifePoints > 25) ? UI_ORANGE : UI_RED);
-    const char *lpStr = TextFormat("%d / 100", player->lifePoints);
+    Color lpCol = (player->lifePoints > (MAX_LIFE_POINTS / 2))
+        ? UI_GREEN
+        : ((player->lifePoints > (MAX_LIFE_POINTS / 4)) ? UI_ORANGE : UI_RED);
+    const char *lpStr = TextFormat("%d / %d", player->lifePoints, MAX_LIFE_POINTS);
     int lpW = MeasureText(lpStr, 22);
     DrawText(lpStr, 1156 - lpW, 217, 22, lpCol);
 
     Rectangle barBg = {834, 248, 322, 16};
     DrawRectangleRounded(barBg, 0.5f, 6, (Color){22, 32, 52, 255});
-    float fillRatio = player->displayLifePoints / 100.0f;
+    float fillRatio = player->displayLifePoints / (float)MAX_LIFE_POINTS;
     if (fillRatio < 0.0f) fillRatio = 0.0f;
     if (fillRatio > 1.0f) fillRatio = 1.0f;
     if (fillRatio > 0.01f)
@@ -619,7 +621,7 @@ static void DrawEndOverlay(
     if (won)
     {
         DrawText("Remaining Life Points", 386, 302, 16, Fade(UI_GRAY, overlayAlpha));
-        DrawText(TextFormat("%d / 100", player->lifePoints), 710, 302, 18, Fade(UI_GREEN, overlayAlpha));
+        DrawText(TextFormat("%d / %d", player->lifePoints, MAX_LIFE_POINTS), 710, 302, 18, Fade(UI_GREEN, overlayAlpha));
 
         DrawText("Total Survival Score", 386, 340, 16, Fade(UI_GRAY, overlayAlpha));
         DrawText(TextFormat("%d", player->survivalScore), 710, 340, 18, Fade(UI_CYAN, overlayAlpha));

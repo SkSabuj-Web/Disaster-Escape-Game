@@ -10,8 +10,8 @@ void InitializePlayer(Player *player)
 {
     player->currentNode = 0;
     player->previousNode = 0;
-    player->lifePoints = 100;
-    player->displayLifePoints = 100.0f;
+    player->lifePoints = MAX_LIFE_POINTS;
+    player->displayLifePoints = (float)MAX_LIFE_POINTS;
     player->status = GAME_PLAYING;
     player->movesCount = 0;
     player->totalCostPaid = 0;

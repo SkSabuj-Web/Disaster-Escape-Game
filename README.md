@@ -6,7 +6,7 @@
 
 ## Project Overview
 
-You start an emergency evacuation at **Location A (Starting Point)** with **100 Life Points** and must reach **Location H (Safe Zone)**. The city is modeled as an undirected, weighted graph with **8 locations** and **12 roads**. Traveling along any road deducts Life Points equal to its weight.
+You start an emergency evacuation at **Location A (Starting Point)** with **50 Life Points** and must reach **Location H (Safe Zone)**. The city is modeled as an undirected, weighted graph with **8 locations** and **12 roads**. Traveling along any road deducts Life Points equal to its weight.
 
 As you navigate the network, unpredictable disasters strike—collapsing roads and bridges, flooding routes with higher travel costs, or shaking the city with earthquakes. Whenever the graph changes or you move, **Dijkstra's Algorithm** dynamically recalculates the optimal evacuation route to the Safe Zone.
 

@@ -24,6 +24,7 @@ typedef struct
 #define GAME_PLAYING 0
 #define GAME_WON 1
 #define GAME_OVER 2
+#define MAX_LIFE_POINTS 50
 
 void InitializePlayer(Player *player);
 bool UpdatePlayer(Player *player, Rectangle mapBounds);
