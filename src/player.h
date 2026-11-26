@@ -27,7 +27,8 @@ typedef struct
 #define MAX_LIFE_POINTS 50
 
 void InitializePlayer(Player *player);
-bool UpdatePlayer(Player *player, Rectangle mapBounds);
+int GetPlayerIntendedMove(const Player *player, Rectangle mapBounds);
+bool ExecutePlayerMove(Player *player, int nextNode);
 void UpdatePlayerAnimation(Player *player, float dt);
 void DrawPlayer(Player player, float timeSec, Rectangle mapBounds);
 

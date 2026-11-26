@@ -86,7 +86,8 @@ The pathfinder in `src/dijkstra.c` implements classical Dijkstra's algorithm on 
 Managed in `src/disaster.c` using non-blocking `GetTime()` and `GetFrameTime()` timers:
 
 - Events trigger at random intervals of **6–10 seconds**, preceded by a **1.8-second warning state** in the dashboard.
-- Before committing any **Road Collapse** or **Bridge Collapse**, the disaster manager temporarily marks the candidate edge as `INT_MAX` and runs `Dijkstra(player.currentNode, H)` to verify Safe Zone `H` remains reachable. If no road can be safely closed, it falls back to Earthquake or Heavy Flood.
+- **Path-Tracing Adaptive Road Blocking**: When attempting to take a road (with a 5-second cooldown, up to 3 reactive ambushes per mission) or when a scheduled **Road Collapse** / **Bridge Collapse** fires, the disaster system traces the player's current Dijkstra shortest path and targets a road along that route.
+- Before committing any road or bridge block, the system temporarily marks the candidate edge as `INT_MAX` and runs `Dijkstra(player.currentNode, H)` to guarantee at least one safe path to Safe Zone `H` always remains open. If no road can be safely closed, it skips blocking or falls back to Earthquake / Heavy Flood.
 - Victory is prioritized if the player reaches Safe Zone `H` on a move that consumes their exact remaining Life Points.
 
 ---

@@ -120,9 +120,17 @@ int main(void)
             {
                 ctx.missionTimeSec += (double)dt;
 
-                if (UpdatePlayer(&ctx.player, GetMapBounds()))
+                int intendedNode = GetPlayerIntendedMove(&ctx.player, GetMapBounds());
+                if (intendedNode != -1)
                 {
-                    RecalculateShortestPath(&ctx);
+                    if (TryReactivePathTraceBlock(&ctx.disaster, &ctx.player, intendedNode))
+                    {
+                        RecalculateShortestPath(&ctx);
+                    }
+                    else if (ExecutePlayerMove(&ctx.player, intendedNode))
+                    {
+                        RecalculateShortestPath(&ctx);
+                    }
                 }
 
                 if (UpdateDisasterManager(&ctx.disaster, &ctx.player))

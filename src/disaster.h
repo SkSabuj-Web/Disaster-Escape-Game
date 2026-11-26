@@ -28,6 +28,8 @@ typedef struct {
 
     int disastersTriggered;
     int disastersSurvived;
+    int reactiveBlocksCount;
+    double nextReactiveBlockTime;
 
     // Alert banner state
     bool alertActive;
@@ -49,7 +51,9 @@ typedef struct {
 
 void InitializeDisasterManager(DisasterManager *dm);
 bool UpdateDisasterManager(DisasterManager *dm, Player *player);
+bool TryReactivePathTraceBlock(DisasterManager *dm, Player *player, int targetNode);
 Vector2 GetDisasterShakeOffset(const DisasterManager *dm);
 const char *GetDisasterName(DisasterType type);
 
 #endif
+

@@ -157,10 +157,10 @@ static void ExecuteMove(Player *player, int nextNode)
     player->survivalScore += 40;
 }
 
-bool UpdatePlayer(Player *player, Rectangle mapBounds)
+int GetPlayerIntendedMove(const Player *player, Rectangle mapBounds)
 {
     if (player->status != GAME_PLAYING)
-        return false;
+        return -1;
 
     int nextNode = SelectClickedNeighbor(player->currentNode, mapBounds);
 
@@ -173,12 +173,17 @@ bool UpdatePlayer(Player *player, Rectangle mapBounds)
         else if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) direction = 3;
 
         if (direction == -1)
-            return false;
+            return -1;
 
         nextNode = SelectDirectionalNeighbor(player->currentNode, direction);
     }
 
-    if (nextNode == -1)
+    return nextNode;
+}
+
+bool ExecutePlayerMove(Player *player, int nextNode)
+{
+    if (player->status != GAME_PLAYING || nextNode < 0 || nextNode >= NODE_COUNT)
         return false;
 
     int prevNode = player->currentNode;

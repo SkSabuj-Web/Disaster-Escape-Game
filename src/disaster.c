@@ -24,7 +24,6 @@ const char *GetDisasterName(DisasterType type)
 
 static DisasterType PickRandomDisasterType(DisasterType lastType)
 {
-    // Pick among the 4 disaster types while avoiding immediate identical repeats when possible
     DisasterType candidates[4] = {
         DISASTER_ROAD_COLLAPSE,
         DISASTER_EARTHQUAKE,
@@ -58,58 +57,156 @@ void InitializeDisasterManager(DisasterManager *dm)
     dm->lastType = DISASTER_NONE;
     dm->lastIntervalSeconds = (double)GetRandomValue(55, 80) / 10.0;
     dm->nextTransitionTime = GetTime() + (dm->lastIntervalSeconds - dm->warningDuration);
+    dm->nextReactiveBlockTime = GetTime();
 
     dm->alertDuration = 3.6f;
     dm->shakeDuration = 0.70f;
     dm->shakeMagnitude = 9.0f;
 }
 
-static int FindSafeRoadToClose(int playerNode, bool preferBridge)
+static void SetAlert(DisasterManager *dm, const char *title, const char *msg, const char *impact, Color color)
 {
-    int candidates[EDGE_COUNT];
+    dm->alertActive = true;
+    dm->alertTimer = dm->alertDuration;
+    snprintf(dm->alertTitle, sizeof(dm->alertTitle), "%s", title);
+    snprintf(dm->alertMessage, sizeof(dm->alertMessage), "%s", msg);
+    snprintf(dm->alertImpact, sizeof(dm->alertImpact), "%s", impact);
+    dm->alertColor = color;
+}
+
+static int TestEdgeBlockSafety(int edgeIndex, int playerNode)
+{
+    int u = edges[edgeIndex].from;
+    int v = edges[edgeIndex].to;
+    int savedWeight = graph[u][v];
+
+    graph[u][v] = INT_MAX;
+    graph[v][u] = INT_MAX;
+
+    int testPath[NODE_COUNT];
+    int testLen = 0;
+    int testCost = Dijkstra(playerNode, NODE_COUNT - 1, testPath, &testLen);
+
+    graph[u][v] = savedWeight;
+    graph[v][u] = savedWeight;
+
+    return testCost;
+}
+
+static void AppendUniqueCandidate(int candidates[], int *count, int edgeIndex, const bool added[])
+{
+    if (edgeIndex < 0 || edgeIndex >= EDGE_COUNT || added[edgeIndex] || edges[edgeIndex].blocked)
+        return;
+    candidates[(*count)++] = edgeIndex;
+}
+
+static int FindSafeRoadToClose(int playerNode, int playerLifePoints, bool preferBridge)
+{
+    // Trace the player's current Dijkstra shortest path so disasters target their active route
+    int activePath[NODE_COUNT];
+    int activeLen = 0;
+    Dijkstra(playerNode, NODE_COUNT - 1, activePath, &activeLen);
+
+    int ordered[EDGE_COUNT];
+    bool added[EDGE_COUNT] = {false};
     int count = 0;
 
-    for (int pass = 0; pass < 2 && count == 0; pass++)
+    // Tier 1: Edges along the player's current shortest path from their current node
+    for (int i = 0; i < activeLen - 1; i++)
     {
-        bool matchBridge = (pass == 0) ? preferBridge : !preferBridge;
-        for (int i = 0; i < EDGE_COUNT; i++)
+        int e = GetEdgeIndex(activePath[i], activePath[i + 1]);
+        if (e >= 0 && !added[e] && !edges[e].blocked)
         {
-            if (edges[i].blocked)
-                continue;
-            if (pass == 0 && edges[i].isBridge != matchBridge)
-                continue;
-            candidates[count++] = i;
+            AppendUniqueCandidate(ordered, &count, e, added);
+            added[e] = true;
         }
     }
 
-    while (count > 0)
+    // Tier 2: Other open roads directly connected to the player's current node
+    for (int i = 0; i < EDGE_COUNT; i++)
     {
-        int idx = GetRandomValue(0, count - 1);
-        int edgeIndex = candidates[idx];
-        candidates[idx] = candidates[count - 1];
-        count--;
-
-        int u = edges[edgeIndex].from;
-        int v = edges[edgeIndex].to;
-        int savedWeight = graph[u][v];
-
-        graph[u][v] = INT_MAX;
-        graph[v][u] = INT_MAX;
-
-        int testPath[NODE_COUNT];
-        int testLen = 0;
-        int testCost = Dijkstra(playerNode, NODE_COUNT - 1, testPath, &testLen);
-
-        graph[u][v] = savedWeight;
-        graph[v][u] = savedWeight;
-
-        if (testCost != -1)
+        if (!added[i] && !edges[i].blocked &&
+            (edges[i].from == playerNode || edges[i].to == playerNode))
         {
-            return edgeIndex;
+            AppendUniqueCandidate(ordered, &count, i, added);
+            added[i] = true;
         }
     }
 
-    return -1;
+    // Tier 3: Remaining open roads on the map
+    for (int i = 0; i < EDGE_COUNT; i++)
+    {
+        if (!added[i] && !edges[i].blocked)
+        {
+            AppendUniqueCandidate(ordered, &count, i, added);
+            added[i] = true;
+        }
+    }
+
+    // Evaluate candidates while always guaranteeing at least 1 safe path to H remains.
+    // Prefer candidates that match preferBridge and keep remaining shortest cost <= playerLifePoints.
+    int fallbackAnyReachable = -1;
+
+    for (int bridgePass = 0; bridgePass < 2; bridgePass++)
+    {
+        bool wantBridge = (bridgePass == 0) ? preferBridge : !preferBridge;
+
+        for (int i = 0; i < count; i++)
+        {
+            int edgeIndex = ordered[i];
+            if (bridgePass == 0 && edges[edgeIndex].isBridge != wantBridge)
+                continue;
+
+            int testCost = TestEdgeBlockSafety(edgeIndex, playerNode);
+            if (testCost == -1)
+                continue;
+
+            if (testCost <= playerLifePoints)
+                return edgeIndex;
+
+            if (fallbackAnyReachable == -1)
+                fallbackAnyReachable = edgeIndex;
+        }
+    }
+
+    return fallbackAnyReachable;
+}
+
+bool TryReactivePathTraceBlock(DisasterManager *dm, Player *player, int targetNode)
+{
+    if (player->status != GAME_PLAYING)
+        return false;
+
+    double now = GetTime();
+    if (now < dm->nextReactiveBlockTime || dm->reactiveBlocksCount >= 3)
+        return false;
+
+    int edgeIdx = GetEdgeIndex(player->currentNode, targetNode);
+    if (edgeIdx < 0 || edges[edgeIdx].blocked)
+        return false;
+
+    // Only intercept the attempted road if at least 1 safe & survivable path to H remains
+    int testCost = TestEdgeBlockSafety(edgeIdx, player->currentNode);
+    if (testCost == -1 || testCost > player->lifePoints)
+        return false;
+
+    int u = edges[edgeIdx].from;
+    int v = edges[edgeIdx].to;
+    BlockEdge(edgeIdx);
+
+    dm->reactiveBlocksCount++;
+    dm->disastersTriggered++;
+    dm->disastersSurvived++;
+    dm->lastType = DISASTER_ROAD_COLLAPSE;
+    dm->nextReactiveBlockTime = now + 5.0;
+    player->survivalScore += 50;
+
+    char msg[112];
+    snprintf(msg, sizeof(msg), "Path traced! Road %c - %c collapsed ahead. Reroute!",
+             nodes[u].id, nodes[v].id);
+    SetAlert(dm, "PATH TRACED: BLOCKED", msg, "REROUTE REQUIRED", COLOR_EMERGENCY_RED);
+
+    return true;
 }
 
 static int FindOpenRoadForFlood(void)
@@ -131,16 +228,6 @@ static int FindOpenRoadForFlood(void)
     return candidates[GetRandomValue(0, count - 1)];
 }
 
-static void SetAlert(DisasterManager *dm, const char *title, const char *msg, const char *impact, Color color)
-{
-    dm->alertActive = true;
-    dm->alertTimer = dm->alertDuration;
-    snprintf(dm->alertTitle, sizeof(dm->alertTitle), "%s", title);
-    snprintf(dm->alertMessage, sizeof(dm->alertMessage), "%s", msg);
-    snprintf(dm->alertImpact, sizeof(dm->alertImpact), "%s", impact);
-    dm->alertColor = color;
-}
-
 static bool TriggerDisasterEvent(DisasterManager *dm, Player *player)
 {
     DisasterType type = dm->pendingType;
@@ -150,7 +237,7 @@ static bool TriggerDisasterEvent(DisasterManager *dm, Player *player)
     if (type == DISASTER_ROAD_COLLAPSE || type == DISASTER_BRIDGE_COLLAPSE)
     {
         bool preferBridge = (type == DISASTER_BRIDGE_COLLAPSE);
-        int edgeIdx = FindSafeRoadToClose(player->currentNode, preferBridge);
+        int edgeIdx = FindSafeRoadToClose(player->currentNode, player->lifePoints, preferBridge);
 
         if (edgeIdx == -1)
         {
@@ -166,14 +253,14 @@ static bool TriggerDisasterEvent(DisasterManager *dm, Player *player)
             if (type == DISASTER_BRIDGE_COLLAPSE)
             {
                 char msg[112];
-                snprintf(msg, sizeof(msg), "Bridge %c - %c collapsed! Dijkstra rerouting.",
+                snprintf(msg, sizeof(msg), "Bridge %c - %c on your route collapsed! Rerouting.",
                          nodes[u].id, nodes[v].id);
                 SetAlert(dm, "BRIDGE COLLAPSE", msg, "BRIDGE CLOSED", COLOR_EMERGENCY_RED);
             }
             else
             {
                 char msg[112];
-                snprintf(msg, sizeof(msg), "Road %c - %c blocked by debris! Route updated.",
+                snprintf(msg, sizeof(msg), "Road %c - %c on your path collapsed! Safe path updated.",
                          nodes[u].id, nodes[v].id);
                 SetAlert(dm, "ROAD COLLAPSE", msg, "ROAD BLOCKED", COLOR_EMERGENCY_RED);
             }
