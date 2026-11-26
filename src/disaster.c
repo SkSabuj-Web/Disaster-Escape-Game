@@ -198,7 +198,7 @@ bool TryReactivePathTraceBlock(DisasterManager *dm, Player *player, int targetNo
     dm->disastersTriggered++;
     dm->disastersSurvived++;
     dm->lastType = DISASTER_ROAD_COLLAPSE;
-    dm->nextReactiveBlockTime = now + 5.0;
+    dm->nextReactiveBlockTime = now + 2.0;
     player->survivalScore += 50;
 
     char msg[112];
